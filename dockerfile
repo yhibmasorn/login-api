@@ -1,13 +1,26 @@
-# Use an official OpenJDK runtime as a parent image
-FROM openjdk:21-ea-13-jdk-slim-bullseye
+# Stage 1: Build the application
+FROM maven:3.9.9-eclipse-temurin-21 AS build
 
-# Set the working directory in the container
+# Set the working directory inside the container
 WORKDIR /app
 
-# Copy the JAR file from the target directory into the container
-COPY target/login-0.0.1-SNAPSHOT.jar app.jar
+# Copy the pom.xml and the source code to the container
+COPY pom.xml .
+COPY src ./src
 
-# Expose port 8080 to the outside world
+# Build the application
+RUN mvn clean package -DskipTests
+
+# Stage 2: Create a lightweight image to run the application
+FROM eclipse-temurin:21-jdk-jammy
+
+# Set the working directory inside the container
+WORKDIR /app
+
+# Copy the JAR file from the build stage to the run stage
+COPY --from=build /app/target/*.jar app.jar
+
+# Expose port 8080 (or the port your application uses)
 EXPOSE 8080
 
 # Run the JAR file

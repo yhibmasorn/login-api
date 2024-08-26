@@ -2,10 +2,13 @@ pipeline {
     agent any
 
     environment {
-        PROJECT_ID = 'yhibmasorn'     // Google Cloud Project ID
-        IMAGE_NAME = 'login-api'           // Name for Docker image
-        REGION = 'asia-southeast1'                 // Region for Cloud Run
-        CLOUD_RUN_SERVICE = 'login-api-service' // Cloud Run service name
+        DOCKER_REGISTRY = 'gcr.io' // Google Container Registry domain
+        PROJECT_ID = 'yhibmasorn' // Your Google Cloud project ID
+        IMAGE_NAME = 'login-api'
+        IMAGE_TAG = 'latest'
+        REGION = 'asia-southeast1' // The region where your Cloud Run service will be deployed
+        CLOUD_RUN_SERVICE = 'login-api-service' // Name of your Cloud Run service
+
     }
 
     stages {
@@ -16,52 +19,49 @@ pipeline {
             }
         }
 
-        stage('Maven Build') {
+        stage('Build Docker Image') {
             steps {
-                // Build the Maven project
-                sh 'mvn -version'
-                sh 'mvn clean package -DskipTests'
-            }
-        }
-
-        stage('Docker Build') {
-            steps {
-                // Use Jenkins credentials to authenticate gcloud
-                withCredentials([file(credentialsId: 'gcp-service-account-key', variable: 'GOOGLE_APPLICATION_CREDENTIALS')]) {
-                    // Authenticate with Google Cloud
-                    sh 'gcloud auth activate-service-account --key-file=$GOOGLE_APPLICATION_CREDENTIALS'
-                    
-                    // Set the project
-                    sh 'gcloud config set project $PROJECT_ID'
-                    
-                    // Build Docker image
-                    sh 'docker build -t gcr.io/$PROJECT_ID/$IMAGE_NAME:$BUILD_NUMBER .'
+                script {
+                    // Build the Docker image using the Dockerfile
+                    def app = docker.build("${DOCKER_REGISTRY}/${PROJECT_ID}/${IMAGE_NAME}:${IMAGE_TAG}")
                 }
             }
         }
 
-        stage('Push to GCR') {
+        stage('Push Docker Image to GCR') {
             steps {
-                sh 'docker push gcr.io/$PROJECT_ID/$IMAGE_NAME:$BUILD_NUMBER'
+                script {
+                    // Authenticate with Google Cloud and push the Docker image to Google Container Registry
+                    withCredentials([file(credentialsId: 'gcp-service-account-key', variable: 'GOOGLE_APPLICATION_CREDENTIALS')]) {
+                        sh 'gcloud auth activate-service-account --key-file=$GOOGLE_APPLICATION_CREDENTIALS'
+                        sh 'gcloud auth configure-docker ${DOCKER_REGISTRY} --quiet'
+                        sh "docker push ${DOCKER_REGISTRY}/${PROJECT_ID}/${IMAGE_NAME}:${IMAGE_TAG}"
+                    }
+                }
             }
         }
 
         stage('Deploy to Cloud Run') {
             steps {
-                sh '''
-                gcloud run deploy $CLOUD_RUN_SERVICE \
-                --image gcr.io/$PROJECT_ID/$IMAGE_NAME:$BUILD_NUMBER \
-                --platform managed \
-                --region $REGION \
-                --allow-unauthenticated
-                '''
+                script {
+                    // Deploy the Docker image to Google Cloud Run
+                    withCredentials([file(credentialsId: 'gcp-service-account-key', variable: 'GOOGLE_APPLICATION_CREDENTIALS')]) {
+                        sh """
+                        gcloud run deploy ${CLOUD_RUN_SERVICE} \
+                        --image ${DOCKER_REGISTRY}/${PROJECT_ID}/${IMAGE_NAME}:${IMAGE_TAG} \
+                        --platform managed \
+                        --region ${REGION} \
+                        --allow-unauthenticated
+                        """
+                    }
+                }
             }
         }
     }
 
     post {
         success {
-            echo 'Deployment to Cloud Run successful!'
+            echo 'Deployment to Cloud Run completed successfully!'
         }
         failure {
             echo 'Deployment to Cloud Run failed.'

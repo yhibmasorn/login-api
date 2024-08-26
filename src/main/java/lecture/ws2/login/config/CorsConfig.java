@@ -13,7 +13,8 @@ public class CorsConfig {
         return new WebMvcConfigurer() {
             public void addCorsMappings(CorsRegistry registry){
                 registry.addMapping("/**")
-                        .allowedOrigins("http://localhost:8090") // Replace with your client's domain
+                        //.allowedOrigins("http://localhost:8090") // Replace with your client's domain
+                        .allowedOrigins("https://login-service-4w5wveglnq-as.a.run.app") // Replace with your client's domain
                         .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                         .allowedHeaders("*")
                         .allowCredentials(true); // Allow cookies if necessary
